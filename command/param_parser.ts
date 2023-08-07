@@ -344,7 +344,6 @@ export class CmdParamChannel<
         if (this.validChannelTypes === null) return null
         if (this.validChannelTypes.includes(value.type as number)) return null
 
-        // TEST
         return new HErrorSingleParam(
             this,
             "The channel is not a channel of the correct type. " + (
