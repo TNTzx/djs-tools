@@ -6,9 +6,8 @@ import * as UseCase from "./use_case"
 import * as UseScope from "./use_scope"
 
 
-
-type Params = (readonly ParamParser.CmdGeneralParameter[]) | null
-type ParamValueMap<ParamsT extends Params> = ParamsT extends readonly ParamParser.CmdGeneralParameter[] ? ParamParser.ParamsToValueMap<ParamsT> : undefined
+type Params = (readonly unknown[]) | null
+type ParamValueMap<ParamsT extends Params> = ParamsT extends null ? undefined : ParamParser.ParamsToValueMap<ParamsT>
 type ExecuteFunc<UseScopeT extends UseScope.UseScope, ParamsT extends Params> =
     (
         interaction: UseScopeT extends UseScope.UseScope ? UseScope.UseScopeToInteractionMap<UseScopeT> : UseScope.MergeScopeCommandInteraction,
@@ -223,7 +222,7 @@ type CmdTemplateLeafArgs<UseScopeT extends UseScope.UseScope = UseScope.UseScope
 export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params> {
     public id: string
     public description: string
-    public parameters: ParamsT
+    public parameters: ParamParser.CmdGeneralParameter[] | null
     public useScope: UseScopeT
     public useCases: UseCases
     public executeFunc: ExecuteFunc<UseScopeT, ParamsT>
@@ -231,7 +230,7 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
     constructor(args: CmdTemplateLeafArgs<UseScopeT, ParamsT>) {
         this.id = args.id
         this.description = args.description
-        this.parameters = args.parameters ?? null as ParamsT
+        this.parameters = (args.parameters as ParamParser.CmdGeneralParameter[]) ?? (null as ParamsT)
         this.useScope = args.useScope
         this.useCases = args.useCases ?? []
         this.executeFunc = args.executeFunc
@@ -241,7 +240,6 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
     public async runCmd(interaction: UseScope.UseScopeToInteractionMap<UseScopeT>) {
         let args: ParamParser.ParamsToValueMap<NonNullable<ParamsT>> | undefined
         if (this.parameters !== null) {
-            this.parameters = this.parameters as NonNullable<ParamsT>
             args = await ParamParser.getParameterValues(
                 interaction, this.parameters
             ) as ParamParser.ParamsToValueMap<NonNullable<ParamsT>>

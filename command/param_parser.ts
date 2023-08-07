@@ -13,14 +13,17 @@ type IsRequiredMap<ValueTypeT, IsRequired extends boolean> = IsRequired extends 
 type Builder = Djs.SlashCommandBuilder | Djs.SlashCommandSubcommandBuilder
 type BuilderReturned = Djs.SlashCommandSubcommandBuilder | Omit<Djs.SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">
 
+type ValueChecker<ValueTypeT> = ((value: ValueTypeT) => Promise<HErrorParamValueCheck | null>) | null
 
 
 type CmdParameterArgs<
+    ValueTypeT,
     IsRequired extends boolean,
 > = {
     required: IsRequired,
     name: string,
-    description: string
+    description: string,
+    valueChecker?: ValueChecker<ValueTypeT>
 }
 export abstract class CmdParameter<
     ValueTypeT = unknown,
@@ -30,11 +33,13 @@ export abstract class CmdParameter<
     public required: IsRequired
     public name: string
     public description: string
+    public valueChecker: ValueChecker<ValueTypeT>
 
-    constructor(args: CmdParameterArgs<IsRequired>) {
+    constructor(args: CmdParameterArgs<ValueTypeT, IsRequired>) {
         this.required = args.required
         this.name = args.name
         this.description = args.description
+        this.valueChecker = args.valueChecker ?? null
     }
 
 
@@ -51,6 +56,12 @@ export abstract class CmdParameter<
         if (value !== null) {
             const assertResult = await this.assertValue(value)
             if (assertResult !== null) throw assertResult
+
+            // TEST
+            if (this.valueChecker !== null) {
+                const valueCheckResult = await this.valueChecker(value)
+                if (valueCheckResult !== null) throw HErrorSingleParam.fromParamValueCheck(valueCheckResult, this)
+            }
         }
 
         return value as IsRequiredMap<ValueTypeT, IsRequired>
@@ -90,11 +101,11 @@ export class ChoiceManager<ChoicesT extends Choices> {
         ) as T
     }
 }
-interface ChoiceManagerArgs<ChoicesT extends Choices> {
-    choiceManager?: ChoiceManager<ChoicesT>
-}
 interface HasChoices<ChoicesT extends Choices> {
     choiceManager: ChoiceManager<ChoicesT> | null
+}
+interface ChoiceManagerMixinArgs<ChoicesT extends Choices> {
+    choiceManager?: ChoiceManager<ChoicesT>
 }
 
 
@@ -102,13 +113,15 @@ interface HasChoices<ChoicesT extends Choices> {
 export class CmdParamString<
     IsRequired extends boolean = boolean,
     ChoicesT extends Choices<string> = Choices<string>
-> extends CmdParameter<string, IsRequired, Djs.SlashCommandStringOption>
-    implements HasChoices<ChoicesT> {
+>
+    extends CmdParameter<string, IsRequired, Djs.SlashCommandStringOption>
+    implements HasChoices<ChoicesT>
+{
     private __nominalString() { }
 
     public choiceManager: ChoiceManager<ChoicesT> | null
 
-    constructor(args: CmdParameterArgs<IsRequired> & ChoiceManagerArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<string, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
     }
@@ -179,7 +192,7 @@ export class CmdParamInteger<
     public min_value: number | null = null
     public max_value: number | null = null
 
-    constructor(args: CmdParameterArgs<IsRequired> & ChoiceManagerArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<number, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
     }
@@ -213,7 +226,7 @@ export class CmdParamNumber<
     public min_value: number | null = null
     public max_value: number | null = null
 
-    constructor(args: CmdParameterArgs<IsRequired> & ChoiceManagerArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<number, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
     }
@@ -318,7 +331,7 @@ export class CmdParamChannel<
 
     public validChannelTypes: ChannelRestrictsT
 
-    constructor(args: CmdParameterArgs<IsRequired> & { validChannelTypes?: ChannelRestrictsT }) {
+    constructor(args: CmdParameterArgs<ValueTypeT, IsRequired> & { validChannelTypes?: ChannelRestrictsT }) {
         super(args)
         this.validChannelTypes = args.validChannelTypes ?? null as unknown as ChannelRestrictsT
     }
@@ -429,11 +442,32 @@ export type CmdGeneralParameter = (
 
 
 
-export class HErrorSingleParam extends Other.HandleableError {
+export class HErrorParamValueCheck extends Other.HandleableError {
+    private __nominalHErrorParamValueCheck() {}
+
+    constructor(public herror: Other.HandleableError) {
+        super(herror.internalMessage, herror)
+    }
+
+    public override getDisplayMessage(): string {
+        return this.herror.getDisplayMessage()
+    }
+}
+
+export class HErrorSingleParam<ParameterT = unknown> extends Other.HandleableError {
     private __nominalHErrorSingleParam() { }
 
-    constructor(public parameter: CmdGeneralParameter, public externalMessage: string, cause?: Error) {
-        super(`${parameter.name}: ${externalMessage}`, cause)
+    public parameter: CmdGeneralParameter
+
+    constructor(parameter: ParameterT, public externalMessage: string, cause?: Error) {
+        const typedParameter = parameter as CmdGeneralParameter
+        super(`${typedParameter.name}: ${externalMessage}`, cause)
+
+        this.parameter = typedParameter
+    }
+
+    static fromParamValueCheck<ParameterT = unknown>(herror: HErrorParamValueCheck, parameter: ParameterT) {
+        return new HErrorSingleParam(parameter, herror.getDisplayMessage(), herror)
     }
 
     public getListDisplay() {
@@ -445,34 +479,46 @@ export class HErrorSingleParam extends Other.HandleableError {
     }
 }
 
-export class HErrorReferredParams extends Other.HandleableError {
-    constructor(public referredParameters: CmdGeneralParameter[], public herror: Other.HandleableError) {
-        super(`${referredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
+export class HErrorReferredParams<ParametersT = unknown> extends Other.HandleableError {
+    private __nominalHErrorReferredParams() {}
+
+    public referredParameters: CmdGeneralParameter[]
+
+    constructor(referredParameters: ParametersT, public herror: Other.HandleableError) {
+        const typedReferredParameters = referredParameters as CmdGeneralParameter[]
+        super(`${typedReferredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
+
+        this.referredParameters = typedReferredParameters
     }
 
     public override getDisplayMessage(): string {
-        return Djs.bold("You have given an invalid argument for the parameter/s ") +
+        return Djs.bold(`You have given an invalid argument for the following parameter${this.referredParameters.length > 1 ? "s" : ""}:\n`) +
             Djs.inlineCode(this.referredParameters.map(param => param.name).join(", ")) + ": " +
             this.herror.getDisplayMessage()
     }
 }
 
-export class HErrorParams extends Other.HandleableError {
+export class HErrorParams<HErrorSingleParamsT = unknown> extends Other.HandleableError {
     private __nominalHErrorParams() { }
 
-    constructor(public herrorSingleParam: HErrorSingleParam[], cause?: Error) {
-        super(`The following parameters received arguments that are invalid: ${herrorSingleParam.map(herror => herror.parameter.name)}`, cause)
+    public herrorSingleParams: HErrorSingleParam[]
+
+    constructor(herrorSingleParams: HErrorSingleParamsT, cause?: Error) {
+        const typedHErrorSingleParams = herrorSingleParams as HErrorSingleParam[]
+        super(`The following parameters received arguments that are invalid: ${typedHErrorSingleParams.map(herror => herror.parameter.name)}`, cause)
+
+        this.herrorSingleParams = typedHErrorSingleParams
     }
 
     public getDisplayMessage(): string {
         return Djs.bold("You have given incorrect arguments for these parameters:\n") +
-            (this.herrorSingleParam.map(af => af.getListDisplay())).join("\n")
+            (this.herrorSingleParams.map(af => af.getListDisplay())).join("\n")
     }
 }
 
 
 
-export type ParamsToValueMap<CmdParameters extends readonly CmdGeneralParameter[]> = {
+export type ParamsToValueMap<CmdParameters> = {
     [P in keyof CmdParameters]:
     CmdParameters[P] extends CmdParameter<
         infer ValueTypeT,
