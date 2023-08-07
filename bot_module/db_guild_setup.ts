@@ -56,7 +56,7 @@ export async function updateGuildsDB(botGuildSids: string[]) {
 
 export class DBGuildSetupper {
     public isAlreadySetup: (guildSid: string) => Promise<boolean>
-    public setup: (guildSid: string) => Prisma.GuildUpdateInput
+    public getSetupData: (guildSid: string) => Prisma.GuildUpdateInput
 
     constructor(
         args: {
@@ -65,21 +65,21 @@ export class DBGuildSetupper {
         }
     ) {
         this.isAlreadySetup = args.isAlreadySetup
-        this.setup = args.getSetupData
+        this.getSetupData = args.getSetupData
     }
 }
 
-export function mergeSetupDatas(dbGuildSetuppers: DBGuildSetupper[], guildSid: string) {
-    return Object.assign({}, ...(dbGuildSetuppers.map(setupper => setupper.setup(guildSid)))) as Prisma.GuildUpdateInput
+function mergeSetupDatas(dbGuildSetuppers: DBGuildSetupper[], guildSid: string) {
+    return Object.assign({}, ...(dbGuildSetuppers.map(setupper => setupper.getSetupData(guildSid)))) as Prisma.GuildUpdateInput
 }
 
-export async function setupGuildConditional(guildSid: string, dbGuildSetuppers: DBGuildSetupper[]) {
+export async function setupDBGuild(guildSid: string, dbGuildSetuppers: DBGuildSetupper[]) {
     const mergedSetupDatas = mergeSetupDatas(dbGuildSetuppers, guildSid)
 
     for (const dbGuildSetupper of dbGuildSetuppers) {
         if (!(await dbGuildSetupper.isAlreadySetup(guildSid))) {
             await DjsTPrisma.getPrismaClient().guild.update({
-                where: {guildSid: guildSid},
+                where: { guildSid: guildSid },
                 data: mergedSetupDatas
             })
         }
@@ -87,10 +87,10 @@ export async function setupGuildConditional(guildSid: string, dbGuildSetuppers: 
 }
 
 
-export function addDbGuildSetupperEvent(botClient: Djs.Client, dbGuildSetuppers: DBGuildSetupper[]) {
+export function setupDbGuildSetupperEvent(botClient: Djs.Client, dbGuildSetuppers: DBGuildSetupper[]) {
     botClient.on(Djs.Events.GuildCreate, async guild => {
         await addGuildToDB(guild.id)
-        await setupGuildConditional(guild.id, dbGuildSetuppers)
+        await setupDBGuild(guild.id, dbGuildSetuppers)
     })
 
     botClient.on(Djs.Events.GuildDelete, async guild => {
@@ -106,7 +106,7 @@ export function addDbGuildSetupperEvent(botClient: Djs.Client, dbGuildSetuppers:
         console.log("Setting up all guilds...")
         const allDbGuildSetuppers = dbGuildSetuppers
         for (const guildSid of allGuildSids) {
-            await setupGuildConditional(guildSid, allDbGuildSetuppers)
+            await setupDBGuild(guildSid, allDbGuildSetuppers)
         }
 
         console.log("Finished setting up database for all guilds.")

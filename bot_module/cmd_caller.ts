@@ -58,7 +58,7 @@ function searchSubcommand(
 
 
 
-export function addCmdCaller(client: Djs.Client) {
+export function setupCmdCallerEvent(client: Djs.Client) {
     client.on(Djs.Events.InteractionCreate, async (interaction) => {
         if (!interaction.isCommand()) return
         interaction = interaction as Djs.ChatInputCommandInteraction
@@ -70,7 +70,7 @@ export function addCmdCaller(client: Djs.Client) {
             return
         }
 
-        const initialCmdTemplate = CmdCache.getCmdTemplateFromCache(interaction.commandName)
+        const initialCmdTemplate = CmdCache.getCachedCmdTemplate(interaction.commandName)
 
         let effectiveTemplate: EffectiveTemplate
 

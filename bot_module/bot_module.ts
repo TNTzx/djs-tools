@@ -39,12 +39,12 @@ export function setupCaches() {
 export async function setupClient(botClient: Djs.Client) {
     setupCaches()
 
-    GuildSetup.addDbGuildSetupperEvent(
+    GuildSetup.setupDbGuildSetupperEvent(
         botClient,
         getAllModules()
             .map(botModule => botModule.dbGuildSetupper)
             .filter(dbGuildSetupper => dbGuildSetupper !== null) as GuildSetup.DBGuildSetupper[]
         )
 
-    CmdCaller.addCmdCaller(botClient)
+    CmdCaller.setupCmdCallerEvent(botClient)
 }
