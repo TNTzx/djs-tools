@@ -103,7 +103,7 @@ export function setupCmdCallerEvent(client: Djs.Client) {
             await effectiveTemplate.template.runCmd(interaction)
         } catch (error) {
             if (error instanceof Other.HandleableError) {
-                await interaction.editReply(Djs.bold(Djs.italic("Error!")) + "\n" + error.getDisplayMessage())
+                await interaction.editReply(Djs.bold(Djs.underscore("Error!")) + "\n" + error.getDisplayMessage())
                 return
             }
 
