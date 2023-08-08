@@ -57,15 +57,18 @@ export async function updateGuildsDB(botGuildSids: string[]) {
 export class DBGuildSetupper {
     public isAlreadySetup: (guildSid: string) => Promise<boolean>
     public getSetupData: (guildSid: string) => Prisma.GuildUpdateInput
+    public botModuleUpdator: ((guildSid: string) => Promise<void>) | null
 
     constructor(
         args: {
             isAlreadySetup: (guildSid: string) => Promise<boolean>,
-            getSetupData: (guildSid: string) => Prisma.GuildUpdateInput
+            getSetupData: (guildSid: string) => Prisma.GuildUpdateInput,
+            botModuleUpdator?: (guildSid: string) => Promise<void>
         }
     ) {
         this.isAlreadySetup = args.isAlreadySetup
         this.getSetupData = args.getSetupData
+        this.botModuleUpdator = args.botModuleUpdator ?? null
     }
 }
 
@@ -82,6 +85,10 @@ export async function setupDBGuild(guildSid: string, dbGuildSetuppers: DBGuildSe
                 where: { guildSid: guildSid },
                 data: mergedSetupDatas
             })
+        }
+
+        if (dbGuildSetupper.botModuleUpdator !== null) {
+            await dbGuildSetupper.botModuleUpdator(guildSid)
         }
     }
 }
