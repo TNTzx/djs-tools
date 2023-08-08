@@ -1,9 +1,12 @@
+import * as Djs from "discord.js"
+
+import * as Other from "../other"
 import * as UseScope from "./use_scope"
 
 
 
 type ConditionFunc<UseScopeT extends UseScope.UseScope> =
-    (interaction: UseScope.UseScopeToInteractionMap<UseScopeT>) => Promise<string | null>
+    (interaction: UseScope.UseScopeToInteractionMap<UseScopeT>) => Promise<Other.HandleableError | null>
 
 
 export class UseCase<UseScopeT extends UseScope.UseScope = UseScope.UseScope> {
@@ -27,13 +30,27 @@ export class UseCase<UseScopeT extends UseScope.UseScope = UseScope.UseScope> {
     }
 
 
-    public async isMet(interaction: UseScope.UseScopeToInteractionMap<UseScopeT>): Promise<string | null> {
+    public async isMet(interaction: UseScope.UseScopeToInteractionMap<UseScopeT>): Promise<Other.HandleableError | null> {
         for (const initialUseCase of this.initialUseCases) {
             const result = await initialUseCase.isMet(interaction)
-            if (typeof result === "string") return result
+            if (result !== null) return result
         }
 
         return await this.conditionFunc(interaction)
+    }
+}
+
+
+
+export class HErrorNotServerOwner extends Other.HandleableError {
+    private __nominalHErrorNotServerOwner() {}
+
+    constructor(public user: Djs.User, public guild: Djs.Guild, cause?: Error) {
+        super(`UserSID ${user.id} is not the guild owner of GuildSID ${guild.id}.`, cause)
+    }
+
+    public override getDisplayMessage(): string {
+        return "You are not the server owner for this guild!"
     }
 }
 
@@ -42,7 +59,7 @@ export const caseServerOwner = new UseCase({
     useScope: UseScope.useScopeGuildOnly,
     conditionFunc: async interaction => {
         if (!(interaction.user.id === interaction.guild.ownerId))
-            return "You are not the server owner!"
+            return new HErrorNotServerOwner(interaction.user, interaction.guild)
 
         return null
     }

@@ -89,10 +89,11 @@ export function setupCmdCallerEvent(client: Djs.Client) {
 
 
 
-        for (const cmdPerm of effectiveTemplate.useCases) {
-            const conditionResult = await cmdPerm.isMet(interaction)
+        for (const useCase of effectiveTemplate.useCases) {
+            const conditionResult = await useCase.isMet(interaction)
             if (conditionResult !== null) {
-                await interaction.editReply(`You cannot use this command! ${conditionResult}`)
+                // TEST
+                await interaction.editReply(`${Djs.bold("You cannot use this command!")}\n` + conditionResult.getDisplayMessage())
                 return
             }
         }
