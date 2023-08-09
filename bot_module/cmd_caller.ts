@@ -83,7 +83,7 @@ export function setupCmdCallerEvent(client: Djs.Client) {
                 useCases: initialCmdTemplate.useCases
             }
         } else {
-            await interaction.editReply(`\`${interaction.commandName}\` is not a command.`)
+            await interaction.followUp(`\`${interaction.commandName}\` is not a command.`)
             return
         }
 
@@ -93,7 +93,7 @@ export function setupCmdCallerEvent(client: Djs.Client) {
             const conditionResult = await useCase.isMet(interaction)
             if (conditionResult !== null) {
                 // TEST
-                await interaction.editReply(`${Djs.bold("You cannot use this command!")}\n` + conditionResult.getDisplayMessage())
+                await interaction.followUp(`${Djs.bold("You cannot use this command!")}\n` + conditionResult.getDisplayMessage())
                 return
             }
         }
