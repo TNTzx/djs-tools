@@ -334,6 +334,7 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
     }
 
 
+    // TODO parameters
     public getReferenceDisplay(hasSlash: boolean = true, hasInlineCode: boolean = true) {
         const branch = this.getUpwardsBranch()
         const branchIds = branch.map(branchItem => branchItem.id)
