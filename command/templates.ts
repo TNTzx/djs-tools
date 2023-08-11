@@ -32,7 +32,11 @@ export interface CmdTemplate<UseScopeT extends UseScope.UseScope = UseScope.UseS
 
     getUpwardsBranch: () => CmdTemplate[]
 
-    getDeployDisplay: (tabs: number) => string
+    getDeployDisplay: (tabs?: number) => string
+}
+
+export interface CmdTemplateReferencer {
+    getReferenceDisplay: (hasSlash?: boolean, hasInlineCode?: boolean) => string
 }
 
 
@@ -248,7 +252,9 @@ type CmdTemplateLeafArgs<UseScopeT extends UseScope.UseScope = UseScope.UseScope
     useCases?: UseCases<UseScopeT>
     executeFunc: ExecuteFunc<UseScopeT, ParamsT>
 }
-export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params> implements CmdTemplate<UseScopeT> {
+export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params>
+    implements CmdTemplate<UseScopeT>, CmdTemplateReferencer
+{
     public parent: CmdTemplateGroup | null = null
     public id: string
     public description: string
