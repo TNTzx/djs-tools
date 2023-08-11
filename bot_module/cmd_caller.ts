@@ -12,6 +12,8 @@ interface EffectiveTemplate {
 }
 
 
+// TODO cmdtemplateleaf no execute function checker
+
 
 function searchSubcommand(
     cmdTemplateGroup: Cmds.CmdTemplateGroup,
@@ -55,7 +57,6 @@ function searchSubcommand(
     const result = recursive(expandPath(getPath(interactionOptions.data[0])), cmdTemplateGroup)
     return { template: result.template, useCases: result.useCases.concat(cmdTemplateGroup.useCases) }
 }
-
 
 
 export function setupCmdCallerEvent(client: Djs.Client) {
