@@ -2,16 +2,15 @@ import * as Cmds from "../command"
 
 
 
-const cmdTemplateCache: Map<string, Cmds.CmdTemplateType> = new Map()
+const cmdTemplateCache: Map<string, Cmds.CmdTemplate> = new Map()
 export function getCmdTemplatesCache() { return cmdTemplateCache }
-export function cacheCmdTemplate<CmdTemplateT>(cmdTemplate: CmdTemplateT) {
-    const typedCmdTemplate = cmdTemplate as Cmds.CmdTemplateType
-    if (cmdTemplateCache.has(typedCmdTemplate.id)) throw new Error(`Command ${cmdTemplate} is a duplicate and is already registered.`)
+export function cacheCmdTemplate(cmdTemplate: Cmds.CmdTemplate) {
+    if (cmdTemplateCache.has(cmdTemplate.id)) throw new Error(`Command ${cmdTemplate.id} is a duplicate and is already registered.`)
 
-    cmdTemplateCache.set(typedCmdTemplate.id, typedCmdTemplate)
+    cmdTemplateCache.set(cmdTemplate.id, cmdTemplate)
 }
 
-export function cacheCmdTemplates<CmdTemplateT>(cmdTemplates: CmdTemplateT[]) {
+export function cacheCmdTemplates(cmdTemplates: Cmds.CmdTemplate[]) {
     for (const cmdTemplate of cmdTemplates) cacheCmdTemplate(cmdTemplate)
 }
 

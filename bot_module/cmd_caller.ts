@@ -17,14 +17,14 @@ function searchSubcommand(
     cmdTemplateGroup: Cmds.CmdTemplateGroup,
     interactionOptions: Omit<Djs.CommandInteractionOptionResolver<Djs.CacheType>, "getMessage" | "getFocused">
 ): EffectiveTemplate {
-    function recursive(nextPath: string[], currentTemplate: Cmds.CmdTemplateType): EffectiveTemplate {
+    function recursive(nextPath: string[], currentTemplate: Cmds.CmdTemplate): EffectiveTemplate {
         if (currentTemplate instanceof Cmds.CmdTemplateLeaf) {
             return { template: currentTemplate, useCases: currentTemplate.useCases }
         }
 
         if (nextPath.length === 0) throw new Error("Command not found.")
 
-        const nextTemplate = currentTemplate.getSubTemplate(nextPath[0])
+        const nextTemplate = (currentTemplate as Cmds.CmdTemplateGroup).getSubTemplate(nextPath[0])
         if (nextTemplate === undefined) throw new Error("Command not found.")
 
         const result = recursive(nextPath.slice(1), nextTemplate)

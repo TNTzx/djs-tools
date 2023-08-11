@@ -23,21 +23,37 @@ export class HErrorCommand extends Other.HandleableError {
 
 
 
+export interface CmdTemplate<UseScopeT extends UseScope.UseScope = UseScope.UseScope> {
+    parent: CmdTemplateGroup | null
+
+    id: string
+    description: string
+    useCases: UseCases<UseScopeT>
+
+    getUpwardsBranch: () => CmdTemplate[]
+
+    getDeployDisplay: (tabs: number) => string
+}
+
+
+
 type CmdTemplateGroupArgs<UseScopeT extends UseScope.UseScope> = {
     id: string
     description: string
     useScope: UseScopeT
     useCases?: UseCases<UseScopeT>
-    subTemplateMap?: Map<string, CmdTemplateType>
+    subTemplateMap?: Map<string, CmdTemplate<UseScopeT>>
 }
-export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.UseScope> {
+export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.UseScope> implements CmdTemplate<UseScopeT> {
     static combineIdSeparator: string = "_"
+
+    public parent: CmdTemplateGroup | null = null
 
     public id: string
     public description: string
     public useScope: UseScopeT
     public useCases: UseCases<UseScopeT>
-    public subTemplateMap: Map<string, CmdTemplateType>
+    public subTemplateMap: Map<string, CmdTemplate<UseScopeT>>
 
     constructor(args: CmdTemplateGroupArgs<UseScopeT>) {
         this.id = args.id
@@ -48,19 +64,32 @@ export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.Use
         this.subTemplateMap = args.subTemplateMap ?? new Map()
     }
 
+    public setParent(parent: CmdTemplateGroup) {
+        this.parent = parent
+        parent.addSubTemplateGeneral(this)
+    }
 
-    private addSubTemplateGeneral(subTemplate: CmdTemplateGroup<UseScopeT> | CmdTemplateLeaf<UseScopeT>) {
+    public getUpwardsBranch(): CmdTemplate[] {
+        if (this.parent !== null) {
+            return [...this.parent.getUpwardsBranch(), this]
+        } else {
+            return [this]
+        }
+    }
+
+
+    public addSubTemplateGeneral(subTemplate: CmdTemplate<UseScopeT>) {
         this.subTemplateMap.set(subTemplate.id, subTemplate)
     }
 
     public addSubTemplateGroup(args: Omit<CmdTemplateGroupArgs<UseScopeT>, "useScope">) {
         const subTemplate = new CmdTemplateGroup({ ...args, useScope: this.useScope })
-        this.addSubTemplateGeneral(subTemplate)
+        subTemplate.setParent(this)
         return subTemplate
     }
     public addSubTemplateLeaf<Parameters extends Params = Params>(args: Omit<CmdTemplateLeafArgs<UseScopeT, Parameters>, "useScope">) {
         const subTemplate = new CmdTemplateLeaf<UseScopeT, Parameters>({ ...args, useScope: this.useScope })
-        this.addSubTemplateGeneral(subTemplate as unknown as CmdTemplateLeaf<UseScopeT>)
+        subTemplate.setParent(this)
         return subTemplate
     }
 
@@ -71,7 +100,7 @@ export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.Use
     static subgroupCombine(cmdTemplateGroups: CmdTemplateGroup[]) {
         const defaultCmdTemplateGroup = cmdTemplateGroups[0]
 
-        const combinedSubTemplateMap: Map<string, CmdTemplateGroup | CmdTemplateLeaf> = new Map()
+        const combinedSubTemplateMap: Map<string, CmdTemplate> = new Map()
         for (const subTemplateMap of cmdTemplateGroups.map(cmdTemplateGroup => cmdTemplateGroup.subTemplateMap)) {
             for (const [id, cmdTemplateChild] of subTemplateMap.entries()) {
                 combinedSubTemplateMap.set(id, cmdTemplateChild)
@@ -98,7 +127,7 @@ export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.Use
                     currentBranches.push([this, ...subTemplateBranch])
                 }
             } else {
-                currentBranches.push([this, subTemplate])
+                currentBranches.push([this, subTemplate as unknown as CmdTemplateLeaf])
             }
         }
 
@@ -216,15 +245,16 @@ type CmdTemplateLeafArgs<UseScopeT extends UseScope.UseScope = UseScope.UseScope
     description: string
     parameters?: ParamsT
     useScope: UseScopeT
-    useCases?: UseCases
+    useCases?: UseCases<UseScopeT>
     executeFunc: ExecuteFunc<UseScopeT, ParamsT>
 }
-export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params> {
+export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params> implements CmdTemplate<UseScopeT> {
+    public parent: CmdTemplateGroup | null = null
     public id: string
     public description: string
     public parameters: ParamParser.CmdGeneralParameter[] | null
     public useScope: UseScopeT
-    public useCases: UseCases
+    public useCases: UseCases<UseScopeT>
     public executeFunc: ExecuteFunc<UseScopeT, ParamsT>
 
     constructor(args: CmdTemplateLeafArgs<UseScopeT, ParamsT>) {
@@ -234,6 +264,19 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
         this.useScope = args.useScope
         this.useCases = args.useCases ?? []
         this.executeFunc = args.executeFunc
+    }
+
+    public setParent(parent: CmdTemplateGroup<UseScopeT>) {
+        this.parent = parent
+        parent.addSubTemplateGeneral(this)
+    }
+
+    public getUpwardsBranch(): CmdTemplate[] {
+        if (this.parent !== null) {
+            return [...this.parent.getUpwardsBranch(), this]
+        } else {
+            return [this]
+        }
     }
 
 
@@ -269,10 +312,29 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
         return this.setupBuilder(new Djs.SlashCommandBuilder())
     }
 
+
     public getDeployDisplay(tabs: number = 0) {
         return "\t".repeat(tabs) + `- ${this.id}`
     }
+
+
+    public getReferenceDisplay(hasSlash: boolean = true, hasInlineCode: boolean = true) {
+        const branch = this.getUpwardsBranch()
+        const branchIds = branch.map(branchItem => branchItem.id)
+        if (branchIds.length === 0) throw new Error("Branch length cannot be 0.")
+
+        let cleanedBranchIds: string[]
+        if (branchIds.length <= 3) {
+            cleanedBranchIds = branchIds
+        } else {
+            const toMerge = branchIds.slice(1, -2)
+            cleanedBranchIds = [branchIds[0], toMerge.join(CmdTemplateGroup.combineIdSeparator), branchIds[branchIds.length - 1]]
+        }
+
+        let result = cleanedBranchIds.join(" ")
+        if (hasSlash) result = `/${result}`
+        if (hasInlineCode) result = Djs.inlineCode(result)
+
+        return result
+    }
 }
-
-
-export type CmdTemplateType = CmdTemplateGroup | CmdTemplateLeaf

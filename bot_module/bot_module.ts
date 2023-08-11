@@ -7,15 +7,15 @@ import * as CmdCaller from "./cmd_caller"
 
 
 
-export class BotModule<CmdTemplates extends Cmds.CmdTemplateType | unknown = unknown> {
+export class BotModule {
     public id: Lowercase<string>
     public dbGuildSetupper: GuildSetup.DBGuildSetupper | null
-    public cmdTemplates: CmdTemplates
+    public cmdTemplates: Cmds.CmdTemplate[]
 
     constructor(args: {
         id: Lowercase<string>
         dbGuildSetupper?: GuildSetup.DBGuildSetupper
-        cmdTemplates: CmdTemplates
+        cmdTemplates: Cmds.CmdTemplate[]
     }) {
         this.id = args.id
         this.dbGuildSetupper = args.dbGuildSetupper ?? null
