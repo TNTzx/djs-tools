@@ -16,6 +16,16 @@ type BuilderReturned = Djs.SlashCommandSubcommandBuilder | Omit<Djs.SlashCommand
 type ValueChecker<ValueTypeT> = ((value: ValueTypeT) => Promise<HErrorParamValueCheck | null>) | null
 
 
+
+export interface CmdGeneralParameter2<ValueTypeT = unknown, IsRequired extends boolean = boolean> {
+    readonly required: IsRequired
+    readonly name: string
+    readonly description: string
+
+    getValue: (interactionOptions: Other.ChatInputCommandInteractionOptions) => Promise<IsRequiredMap<ValueTypeT, IsRequired>>
+    addOptionToBuilder: (builder: Builder) => BuilderReturned
+}
+
 type CmdParameterArgs<
     ValueTypeT,
     IsRequired extends boolean,
@@ -29,11 +39,11 @@ export abstract class CmdParameter<
     ValueTypeT = unknown,
     IsRequired extends boolean = boolean,
     BuilderOption extends Djs.ApplicationCommandOptionBase = Djs.ApplicationCommandOptionBase
-> {
-    public required: IsRequired
-    public name: string
-    public description: string
-    public valueChecker: ValueChecker<ValueTypeT>
+> implements CmdGeneralParameter2<ValueTypeT, IsRequired> {
+    public readonly required: IsRequired
+    public readonly name: string
+    public readonly description: string
+    public readonly valueChecker: ValueChecker<ValueTypeT>
 
     constructor(args: CmdParameterArgs<ValueTypeT, IsRequired>) {
         this.required = args.required
@@ -280,6 +290,15 @@ export class CmdParamMentionable<
     }
 }
 
+
+export interface CmdParamChannelGeneral<
+    ChannelRestrictsT extends (readonly ChannelRestrict[]) | null = (readonly ChannelRestrict[]) | null,
+    ValueTypeT = unknown,
+    IsRequired extends boolean = boolean
+> extends CmdParameter<ValueTypeT, IsRequired, Djs.SlashCommandChannelOption> {
+    validChannelTypes: ChannelRestrictsT
+}
+
 export type CmdParamChannelValue = NonNullable<ReturnType<Other.ChatInputCommandInteractionOptions["getChannel"]>>
 
 export enum ChannelRestrict {
@@ -293,11 +312,11 @@ export enum ChannelRestrict {
     Forum = Djs.ChannelType.GuildForum
 }
 
-type ChannelRestrictsMap<ValidChannelTypes extends ChannelRestrict[]> = (
+type ChannelRestrictsMap<ValidChannelTypes extends readonly ChannelRestrict[]> = (
     { [P in keyof ValidChannelTypes]: ChannelEnumToRestrictMap<ValidChannelTypes[P]> }[number]
 )
-type ChannelRestrictsOptionalMap<ValidChannelTypes extends ChannelRestrict[] | null> = (
-    ValidChannelTypes extends ChannelRestrict[]
+type ChannelRestrictsOptionalMap<ValidChannelTypes extends (readonly ChannelRestrict[]) | null> = (
+    ValidChannelTypes extends readonly ChannelRestrict[]
     ? ChannelRestrictsMap<ValidChannelTypes>
     : CmdParamChannelValue
 )
@@ -323,15 +342,18 @@ const channelEnumToStringMap = {
     [ChannelRestrict.Forum]: "forum"
 }
 export class CmdParamChannel<
-    ChannelRestrictsT extends ChannelRestrict[] | null = ChannelRestrict[] | null,
+    ChannelRestrictsT extends (readonly ChannelRestrict[]) | null = (readonly ChannelRestrict[]) | null,
     ValueTypeT extends ChannelRestrictsOptionalMap<ChannelRestrictsT> = ChannelRestrictsOptionalMap<ChannelRestrictsT>,
     IsRequired extends boolean = boolean,
-> extends CmdParameter<ValueTypeT, IsRequired, Djs.SlashCommandChannelOption> {
+>
+    extends CmdParameter<ValueTypeT, IsRequired, Djs.SlashCommandChannelOption>
+    implements CmdParamChannelGeneral<ChannelRestrictsT, ValueTypeT, IsRequired>
+{
     private __nominalChannel() { }
 
     public validChannelTypes: ChannelRestrictsT
 
-    constructor(args: CmdParameterArgs<ValueTypeT, IsRequired> & { validChannelTypes?: ChannelRestrictsT }) {
+    constructor(args: CmdParameterArgs<ValueTypeT, IsRequired> & { readonly validChannelTypes?: ChannelRestrictsT }) {
         super(args)
         this.validChannelTypes = args.validChannelTypes ?? null as unknown as ChannelRestrictsT
     }
@@ -433,13 +455,6 @@ type ValueOrChoiceMap<ValueTypeT, ChoicesT extends Choices<string | number>> = (
 )
 
 
-export type CmdGeneralParameter = (
-    CmdParameter
-    | CmdParamString | CmdParamInteger | CmdParamNumber | CmdParamBoolean
-    | CmdParamMentionable | CmdParamChannel | CmdParamRole | CmdParamUser | CmdParamAttachment
-)
-
-
 
 export class HErrorParamValueCheck extends Other.HandleableError {
     private __nominalHErrorParamValueCheck() {}
@@ -453,19 +468,14 @@ export class HErrorParamValueCheck extends Other.HandleableError {
     }
 }
 
-export class HErrorSingleParam<ParameterT = unknown> extends Other.HandleableError {
+export class HErrorSingleParam extends Other.HandleableError {
     private __nominalHErrorSingleParam() { }
 
-    public parameter: CmdGeneralParameter
-
-    constructor(parameter: ParameterT, public externalMessage: string, cause?: Error) {
-        const typedParameter = parameter as CmdGeneralParameter
-        super(`${typedParameter.name}: ${externalMessage}`, cause)
-
-        this.parameter = typedParameter
+    constructor(public parameter: CmdGeneralParameter2, public externalMessage: string, cause?: Error) {
+        super(`${parameter.name}: ${externalMessage}`, cause)
     }
 
-    static fromParamValueCheck<ParameterT = unknown>(herror: HErrorParamValueCheck, parameter: ParameterT) {
+    static fromParamValueCheck(herror: HErrorParamValueCheck, parameter: CmdGeneralParameter2) {
         return new HErrorSingleParam(parameter, herror.getDisplayMessage(), herror)
     }
 
@@ -478,16 +488,11 @@ export class HErrorSingleParam<ParameterT = unknown> extends Other.HandleableErr
     }
 }
 
-export class HErrorReferredParams<ParametersT = unknown> extends Other.HandleableError {
+export class HErrorReferredParams extends Other.HandleableError {
     private __nominalHErrorReferredParams() {}
 
-    public referredParameters: CmdGeneralParameter[]
-
-    constructor(referredParameters: ParametersT, public herror: Other.HandleableError) {
-        const typedReferredParameters = referredParameters as CmdGeneralParameter[]
-        super(`${typedReferredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
-
-        this.referredParameters = typedReferredParameters
+    constructor(public referredParameters: CmdGeneralParameter2[], public herror: Other.HandleableError) {
+        super(`${referredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
     }
 
     public override getDisplayMessage(): string {
@@ -530,7 +535,7 @@ export type ParamsToValueMap<CmdParameters> = {
 }
 
 export async function getParameterValues<
-    Parameters extends readonly CmdGeneralParameter[],
+    Parameters extends readonly CmdGeneralParameter2[],
 >(
     interaction: UseScope.AllScopedCommandInteraction,
     parameters: Parameters,

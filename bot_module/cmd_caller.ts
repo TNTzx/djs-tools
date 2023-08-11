@@ -92,7 +92,6 @@ export function setupCmdCallerEvent(client: Djs.Client) {
         for (const useCase of effectiveTemplate.useCases) {
             const conditionResult = await useCase.isMet(interaction)
             if (conditionResult !== null) {
-                // TEST
                 await interaction.followUp(`${Djs.bold("You cannot use this command!")}\n` + conditionResult.getDisplayMessage())
                 return
             }

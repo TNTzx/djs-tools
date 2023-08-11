@@ -6,7 +6,7 @@ import * as UseCase from "./use_case"
 import * as UseScope from "./use_scope"
 
 
-type Params = (readonly unknown[]) | null
+type Params = (readonly ParamParser.CmdGeneralParameter2[]) | null
 type ParamValueMap<ParamsT extends Params> = ParamsT extends null ? undefined : ParamParser.ParamsToValueMap<ParamsT>
 type ExecuteFunc<UseScopeT extends UseScope.UseScope, ParamsT extends Params> =
     (
@@ -93,8 +93,8 @@ export class CmdTemplateGroup<UseScopeT extends UseScope.UseScope = UseScope.Use
         subTemplate.setParent(this)
         return subTemplate
     }
-    public addSubTemplateLeaf<Parameters extends Params = Params>(args: Omit<CmdTemplateLeafArgs<UseScopeT, Parameters>, "useScope">) {
-        const subTemplate = new CmdTemplateLeaf<UseScopeT, Parameters>({ ...args, useScope: this.useScope })
+    public addSubTemplateLeaf<ParamsT extends Params = Params>(args: Omit<CmdTemplateLeafArgs<UseScopeT, ParamsT>, "useScope">) {
+        const subTemplate = new CmdTemplateLeaf<UseScopeT, ParamsT>({ ...args, useScope: this.useScope })
         subTemplate.setParent(this)
         return subTemplate
     }
@@ -251,27 +251,33 @@ type CmdTemplateLeafArgs<UseScopeT extends UseScope.UseScope = UseScope.UseScope
     description: string
     parameters?: ParamsT
     useScope: UseScopeT
-    useCases?: UseCases<UseScopeT>
-    executeFunc: ExecuteFunc<UseScopeT, ParamsT>
+    useCases?: UseCases<UseScopeT>,
+    executeFunc?: ExecuteFunc<UseScopeT, ParamsT>
 }
 export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params>
     implements CmdTemplate<UseScopeT>, CmdTemplateReferencer
 {
     public parent: CmdTemplateGroup | null = null
+
     public id: string
     public description: string
-    public parameters: ParamParser.CmdGeneralParameter[] | null
+    public parameters: ParamsT
     public useScope: UseScopeT
     public useCases: UseCases<UseScopeT>
-    public executeFunc: ExecuteFunc<UseScopeT, ParamsT>
+
+    public executeFunc: ExecuteFunc<UseScopeT, ParamsT> | null
 
     constructor(args: CmdTemplateLeafArgs<UseScopeT, ParamsT>) {
         this.id = args.id
         this.description = args.description
-        this.parameters = (args.parameters as ParamParser.CmdGeneralParameter[]) ?? (null as ParamsT)
+        this.parameters = args.parameters ?? (null as ParamsT)
         this.useScope = args.useScope
         this.useCases = args.useCases ?? []
-        this.executeFunc = args.executeFunc
+        this.executeFunc = args.executeFunc ?? null
+    }
+
+    public setExecuteFunc(executeFunc: ExecuteFunc<UseScopeT, ParamsT>) {
+        this.executeFunc = executeFunc
     }
 
     public setParent(parent: CmdTemplateGroup<UseScopeT>) {
@@ -289,6 +295,8 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
 
 
     public async runCmd(interaction: UseScope.UseScopeToInteractionMap<UseScopeT>) {
+        if (this.executeFunc === null) throw new Error("No execute function set.")
+
         let args: ParamParser.ParamsToValueMap<NonNullable<ParamsT>> | undefined
         if (this.parameters !== null) {
             args = await ParamParser.getParameterValues(
