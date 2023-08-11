@@ -33,6 +33,8 @@ export interface CmdTemplate<UseScopeT extends UseScope.UseScope = UseScope.UseS
     getUpwardsBranch: () => CmdTemplate[]
 
     getDeployDisplay: (tabs?: number) => string
+
+    createBuilder: () => Djs.SlashCommandBuilder
 }
 
 export interface CmdTemplateReferencer {
@@ -333,7 +335,7 @@ export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseS
         if (branchIds.length <= 3) {
             cleanedBranchIds = branchIds
         } else {
-            const toMerge = branchIds.slice(1, -2)
+            const toMerge = branchIds.slice(1, -1)
             cleanedBranchIds = [branchIds[0], toMerge.join(CmdTemplateGroup.combineIdSeparator), branchIds[branchIds.length - 1]]
         }
 
