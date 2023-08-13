@@ -67,7 +67,7 @@ export function sayDevEnvStatus() {
 
 
 
-class ThemeData {
+export class ThemeData {
     constructor(
         public primaryColor: Djs.ColorResolvable,
         public secondaryColor: Djs.ColorResolvable,
@@ -76,6 +76,7 @@ class ThemeData {
 
     public colorEmbed(embed: Djs.EmbedBuilder) {
         embed.setColor(this.primaryColor)
+        return embed
     }
 }
 
