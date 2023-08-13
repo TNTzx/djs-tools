@@ -26,18 +26,18 @@ export function getAppId() {
 let globalClient: Djs.Client | null = null
 
 
-export function setClient(client: Djs.Client) {
+export function setBotClient(client: Djs.Client) {
     globalClient = client
 }
 
-export function getClient() {
+export function getBotClient() {
     if (globalClient === null) throw "No client found."
     return globalClient
 }
 
 
-export async function clientLogin() {
-    const client = getClient()
+export async function botClientLogin() {
+    const client = getBotClient()
 
     client.once(Djs.Events.ClientReady, clientPass => {
         console.log(`Logged in as ${clientPass.user.tag}, ID ${clientPass.user.id}.`)
