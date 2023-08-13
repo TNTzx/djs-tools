@@ -64,3 +64,28 @@ export function getDevEnvStatus() {
 export function sayDevEnvStatus() {
     console.log(`Currently in ${devEnvStatus ? "development" : "production"} environment.`)
 }
+
+
+
+class ThemeData {
+    constructor(
+        public primaryColor: Djs.ColorResolvable,
+        public secondaryColor: Djs.ColorResolvable,
+        public tertiaryColor: Djs.ColorResolvable
+    ) {}
+
+    public colorEmbed(embed: Djs.EmbedBuilder) {
+        embed.setColor(this.primaryColor)
+    }
+}
+
+
+let themeData: ThemeData | null = null
+export function setThemeData(newThemeData: ThemeData) {
+    themeData = newThemeData
+}
+
+export function getThemeData() {
+    if (themeData === null) throw new Error("Theme data not found.")
+    return themeData
+}
