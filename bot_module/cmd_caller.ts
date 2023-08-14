@@ -15,9 +15,35 @@ interface EffectiveTemplate {
 // TODO cmdtemplateleaf no execute function checker
 
 
+function getPathFromItr(interaction: Djs.ChatInputCommandInteraction): string[] {
+    function recursive(optionsData: Djs.CommandInteractionOption): string[] {
+        if (optionsData.options === undefined) throw new Error("Interaction options are invalid.")
+
+        // type >= 3 means not subcommandgroup or subcommand
+        if (optionsData.options.length === 0 || optionsData.options[0].type >= 3) return [optionsData.name]
+        return [optionsData.name, ...recursive(optionsData.options[0])]
+    }
+
+    return recursive(interaction.options.data[0])
+}
+
+function expandPath(path: string[]) {
+    let newPath: string[] = []
+    for (const pathPoint of path) {
+        if (pathPoint.includes(Cmds.CmdTemplateGroup.combineIdSeparator)) {
+            newPath = newPath.concat(pathPoint.split(Cmds.CmdTemplateGroup.combineIdSeparator))
+        } else {
+            newPath.push(pathPoint)
+        }
+    }
+
+    return newPath
+}
+
+
 function searchSubcommand(
     cmdTemplateGroup: Cmds.CmdTemplateGroup,
-    interactionOptions: Omit<Djs.CommandInteractionOptionResolver<Djs.CacheType>, "getMessage" | "getFocused">
+    path: string[]
 ): EffectiveTemplate {
     function recursive(nextPath: string[], currentTemplate: Cmds.CmdTemplate): EffectiveTemplate {
         if (currentTemplate instanceof Cmds.CmdTemplateLeaf) {
@@ -33,28 +59,7 @@ function searchSubcommand(
         return { template: result.template, useCases: result.useCases.concat(currentTemplate.useCases) }
     }
 
-    function getPath(optionsData: Djs.CommandInteractionOption<Djs.CacheType>): string[] {
-        if (optionsData.options === undefined) throw new Error("Interaction options are invalid.")
-
-        // type >= 3 means not subcommandgroup or subcommand
-        if (optionsData.options.length === 0 || optionsData.options[0].type >= 3) return [optionsData.name]
-        return [optionsData.name, ...getPath(optionsData.options[0])]
-    }
-
-    function expandPath(path: string[]) {
-        let newPath: string[] = []
-        for (const pathPoint of path) {
-            if (pathPoint.includes(Cmds.CmdTemplateGroup.combineIdSeparator)) {
-                newPath = newPath.concat(pathPoint.split(Cmds.CmdTemplateGroup.combineIdSeparator))
-            } else {
-                newPath.push(pathPoint)
-            }
-        }
-
-        return newPath
-    }
-
-    const result = recursive(expandPath(getPath(interactionOptions.data[0])), cmdTemplateGroup)
+    const result = recursive(path, cmdTemplateGroup)
     return { template: result.template, useCases: result.useCases.concat(cmdTemplateGroup.useCases) }
 }
 
@@ -76,7 +81,7 @@ export function setupCmdCallerEvent(client: Djs.Client) {
         let effectiveTemplate: EffectiveTemplate
 
         if (initialCmdTemplate instanceof Cmds.CmdTemplateGroup) {
-            const result = searchSubcommand(initialCmdTemplate, interaction.options)
+            const result = searchSubcommand(initialCmdTemplate, expandPath(getPathFromItr(interaction)))
             effectiveTemplate = result
         } else if (initialCmdTemplate instanceof Cmds.CmdTemplateLeaf) {
             effectiveTemplate = {
