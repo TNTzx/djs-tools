@@ -64,6 +64,7 @@ function searchSubcommand(
 }
 
 
+
 export function setupCmdCallerEvent(client: Djs.Client) {
     client.on(Djs.Events.InteractionCreate, async (interaction) => {
         if (!interaction.isCommand()) return
