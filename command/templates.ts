@@ -6,7 +6,7 @@ import * as UseCase from "./use_case"
 import * as UseScope from "./use_scope"
 
 
-type Params = (readonly ParamParser.CmdGeneralParameter2[]) | null
+type Params = (readonly ParamParser.CmdGeneralParameter[]) | null
 type ParamValueMap<ParamsT extends Params> = ParamsT extends null ? undefined : ParamParser.ParamsToValueMap<ParamsT>
 type ExecuteFunc<UseScopeT extends UseScope.UseScope, ParamsT extends Params> =
     (
@@ -18,7 +18,7 @@ type UseCases<UseScopeT extends UseScope.UseScope = UseScope.UseScope> = readonl
 
 
 export class HErrorCommand extends Other.HandleableError {
-    private __nominalAssertFailCommand() {}
+    private __nominalAssertFailCommand() { }
 }
 
 
@@ -255,8 +255,7 @@ type CmdTemplateLeafArgs<UseScopeT extends UseScope.UseScope = UseScope.UseScope
     executeFunc?: ExecuteFunc<UseScopeT, ParamsT>
 }
 export class CmdTemplateLeaf<UseScopeT extends UseScope.UseScope = UseScope.UseScope, ParamsT extends Params = Params>
-    implements CmdTemplate<UseScopeT>, CmdTemplateReferencer
-{
+    implements CmdTemplate<UseScopeT>, CmdTemplateReferencer {
     public parent: CmdTemplateGroup | null = null
 
     public id: string

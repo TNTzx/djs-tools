@@ -1,6 +1,5 @@
 import Djs from "discord.js"
 
-import * as UseScope from "./use_scope"
 import * as Other from "../other"
 
 
@@ -17,12 +16,13 @@ type ValueChecker<ValueTypeT> = ((value: ValueTypeT) => Promise<HErrorParamValue
 
 
 
-export interface CmdGeneralParameter2<ValueTypeT = unknown, IsRequired extends boolean = boolean> {
+export interface CmdGeneralParameter<ValueTypeT = unknown, IsRequired extends boolean = boolean> {
     readonly required: IsRequired
     readonly name: string
     readonly description: string
 
-    getValue: (interactionOptions: Other.ChatInputCommandInteractionOptions) => Promise<IsRequiredMap<ValueTypeT, IsRequired>>
+    getValueFromItrOptions: (interactionOptions: Other.ChatInputCommandInteractionOptions) => ValueTypeT | null
+    getValueFromItr: (interaction: Djs.ChatInputCommandInteraction) => Promise<IsRequiredMap<ValueTypeT, IsRequired>>
     addOptionToBuilder: (builder: Builder) => BuilderReturned
 }
 
@@ -39,7 +39,7 @@ export abstract class CmdParameter<
     ValueTypeT = unknown,
     IsRequired extends boolean = boolean,
     BuilderOption extends Djs.ApplicationCommandOptionBase = Djs.ApplicationCommandOptionBase
-> implements CmdGeneralParameter2<ValueTypeT, IsRequired> {
+> implements CmdGeneralParameter<ValueTypeT, IsRequired> {
     public readonly required: IsRequired
     public readonly name: string
     public readonly description: string
@@ -57,10 +57,10 @@ export abstract class CmdParameter<
         return [this.name, this.required]
     }
 
-    protected abstract getValueFromInteractionOptions(interactionOptions: Other.ChatInputCommandInteractionOptions): ValueTypeT | null
+    public abstract getValueFromItrOptions(interactionOptions: Other.ChatInputCommandInteractionOptions): ValueTypeT | null
 
-    public async getValue(interactionOptions: Other.ChatInputCommandInteractionOptions): Promise<IsRequiredMap<ValueTypeT, IsRequired>> {
-        const value = await this.getValueFromInteractionOptions(interactionOptions)
+    public async getValueFromItr(interaction: Djs.ChatInputCommandInteraction): Promise<IsRequiredMap<ValueTypeT, IsRequired>> {
+        const value = await this.getValueFromItrOptions(interaction.options)
         if (this.required && value === null) throw new HErrorSingleParam(this, "This argument is required.")
 
         if (value !== null) {
@@ -145,7 +145,7 @@ export class CmdParamString<
         return this
     }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getString(...this.toGetValueArgs())
     }
 
@@ -212,7 +212,7 @@ export class CmdParamInteger<
         return this
     }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getInteger(...this.toGetValueArgs())
     }
 
@@ -247,7 +247,7 @@ export class CmdParamNumber<
         return this
     }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getNumber(...this.toGetValueArgs())
     }
 
@@ -265,7 +265,7 @@ export class CmdParamBoolean<
 > extends CmdParameter<boolean, IsRequired, Djs.SlashCommandBooleanOption> {
     private __nominalBoolean() { }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getBoolean(...this.toGetValueArgs())
     }
 
@@ -281,7 +281,7 @@ export class CmdParamMentionable<
 > extends CmdParameter<CmdParamMentionableValue, IsRequired, Djs.SlashCommandMentionableOption> {
     private __nominalMentionable() { }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getMentionable(...this.toGetValueArgs())
     }
 
@@ -358,7 +358,7 @@ export class CmdParamChannel<
         this.validChannelTypes = args.validChannelTypes ?? null as unknown as ChannelRestrictsT
     }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getChannel(...this.toGetValueArgs()) as ValueTypeT
     }
 
@@ -390,7 +390,7 @@ export class CmdParamRole<
 > extends CmdParameter<CmdParamRoleValue, IsRequired, Djs.SlashCommandRoleOption> {
     private __nominalRole() { }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getRole(...this.toGetValueArgs())
     }
 
@@ -405,7 +405,7 @@ export class CmdParamUser<
 > extends CmdParameter<CmdParamUserValue, IsRequired, Djs.SlashCommandUserOption> {
     private __nominalUser() { }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getUser(...this.toGetValueArgs())
     }
 
@@ -420,7 +420,7 @@ export class CmdParamAttachment<
 > extends CmdParameter<CmdParamAttachmentValue, IsRequired, Djs.SlashCommandAttachmentOption> {
     private __nominalAttachment() { }
 
-    protected override getValueFromInteractionOptions(options: Other.ChatInputCommandInteractionOptions) {
+    public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getAttachment(...this.toGetValueArgs())
     }
 
@@ -471,11 +471,11 @@ export class HErrorParamValueCheck extends Other.HandleableError {
 export class HErrorSingleParam extends Other.HandleableError {
     private __nominalHErrorSingleParam() { }
 
-    constructor(public parameter: CmdGeneralParameter2, public externalMessage: string, cause?: Error) {
+    constructor(public parameter: CmdGeneralParameter, public externalMessage: string, cause?: Error) {
         super(`${parameter.name}: ${externalMessage}`, cause)
     }
 
-    static fromParamValueCheck(herror: HErrorParamValueCheck, parameter: CmdGeneralParameter2) {
+    static fromParamValueCheck(herror: HErrorParamValueCheck, parameter: CmdGeneralParameter) {
         return new HErrorSingleParam(parameter, herror.getDisplayMessage(), herror)
     }
 
@@ -491,7 +491,7 @@ export class HErrorSingleParam extends Other.HandleableError {
 export class HErrorReferredParams extends Other.HandleableError {
     private __nominalHErrorReferredParams() {}
 
-    constructor(public referredParameters: CmdGeneralParameter2[], public herror: Other.HandleableError) {
+    constructor(public referredParameters: CmdGeneralParameter[], public herror: Other.HandleableError) {
         super(`${referredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
     }
 
@@ -535,16 +535,16 @@ export type ParamsToValueMap<CmdParameters> = {
 }
 
 export async function getParameterValues<
-    Parameters extends readonly CmdGeneralParameter2[],
+    Parameters extends readonly CmdGeneralParameter[],
 >(
-    interaction: UseScope.AllScopedCommandInteraction,
+    interaction: Djs.ChatInputCommandInteraction,
     parameters: Parameters,
 ): Promise<ParamsToValueMap<Parameters>> {
     const results = []
     const errors: HErrorSingleParam[] = []
     for (const parameter of parameters) {
         try {
-            results.push(await parameter.getValue(interaction.options))
+            results.push(await parameter.getValueFromItr(interaction))
         } catch (error) {
             if (error instanceof HErrorSingleParam) {
                 errors.push(error)

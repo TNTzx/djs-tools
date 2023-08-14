@@ -20,9 +20,11 @@ export interface GuildCommandInteraction extends Djs.ChatInputCommandInteraction
     member: Djs.GuildMember
 }
 
-export interface DMCommandInteraction
-    extends Omit<Djs.ChatInputCommandInteraction, "guild" | "guildId" | "channel">
-{}
+export interface DMCommandInteraction extends Djs.ChatInputCommandInteraction {
+    guild: null
+    guildId: null
+    member: null
+}
 
 export type AllScopedCommandInteraction = Djs.ChatInputCommandInteraction | GuildCommandInteraction | DMCommandInteraction
 
