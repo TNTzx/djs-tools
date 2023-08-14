@@ -10,25 +10,29 @@ export interface ReplyOptions extends Djs.BaseMessageOptions {
 }
 
 
-type Source = UseScope.AllScopedCommandInteraction | Djs.Message
-export abstract class Context<SourceT extends Source> {
+type ContextGeneralSource = UseScope.AllScopedCommandInteraction | Djs.Message
+export abstract class Context<SourceT extends ContextGeneralSource = ContextGeneralSource, InGuild extends boolean = boolean> {
     public source: SourceT
 
     constructor(source: SourceT) {
         this.source = source
     }
 
+    public isSourceMessage(): this is this & {source: Djs.Message<InGuild>} {
+        return this.source instanceof Djs.Message
+    }
+
     public abstract reply(args: string | ReplyOptions): Promise<Djs.Message>
 }
 
 
-type SourceGuild = UseScope.GuildCommandInteraction | Djs.Message<true>
-export class ContextGuild<SourceT extends SourceGuild> extends Context<SourceT> {
+type ContextGuildSource = UseScope.GuildCommandInteraction | Djs.Message<true>
+export class ContextGuild extends Context<ContextGuildSource, true> {
     public guild: Djs.Guild
     public channel: Djs.GuildTextBasedChannel
     public member: Djs.GuildMember
 
-    constructor(source: SourceT) {
+    constructor(source: ContextGuildSource) {
         super(source)
 
         this.guild = source.guild
@@ -49,11 +53,11 @@ export class ContextGuild<SourceT extends SourceGuild> extends Context<SourceT> 
 }
 
 
-type SourceDM = UseScope.DMCommandInteraction | Djs.Message<false>
-export class ContextDM<SourceT extends SourceDM> extends Context<SourceT> {
+type ContextDMSource = UseScope.DMCommandInteraction | Djs.Message<false>
+export class ContextDM extends Context<ContextDMSource, true> {
     public user: Djs.User
 
-    constructor(source: SourceT) {
+    constructor(source: ContextDMSource) {
         super(source)
 
         if (source instanceof Djs.ChatInputCommandInteraction) {

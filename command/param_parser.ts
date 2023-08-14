@@ -1,6 +1,7 @@
 import Djs from "discord.js"
 
 import * as Other from "../other"
+import * as Context from "./context"
 
 
 
@@ -23,7 +24,76 @@ export interface CmdGeneralParameter<ValueTypeT = unknown, IsRequired extends bo
 
     getValueFromItrOptions: (interactionOptions: Other.ChatInputCommandInteractionOptions) => ValueTypeT | null
     getValueFromItr: (interaction: Djs.ChatInputCommandInteraction) => Promise<IsRequiredMap<ValueTypeT, IsRequired>>
+
+    getValueFromString: (context: Context.ContextGuild | Context.ContextDM, guildinput: string) => Promise<IsRequiredMap<ValueTypeT, IsRequired>>
+
     addOptionToBuilder: (builder: Builder) => BuilderReturned
+}
+
+
+
+export class HErrorParamValueCheck extends Other.HandleableError {
+    private __nominalHErrorParamValueCheck() {}
+
+    constructor(public herror: Other.HandleableError) {
+        super(herror.internalMessage, herror)
+    }
+
+    public override getDisplayMessage(): string {
+        return this.herror.getDisplayMessage()
+    }
+}
+
+export class HErrorSingleParam extends Other.HandleableError {
+    private __nominalHErrorSingleParam() { }
+
+    constructor(public parameter: CmdGeneralParameter, public externalMessage: string, cause?: Error) {
+        super(`${parameter.name}: ${externalMessage}`, cause)
+    }
+
+    static fromParamValueCheck(herror: HErrorParamValueCheck, parameter: CmdGeneralParameter) {
+        return new HErrorSingleParam(parameter, herror.getDisplayMessage(), herror)
+    }
+
+    public getListDisplay() {
+        return `${Djs.inlineCode(this.parameter.name)}: ${this.externalMessage}`
+    }
+
+    public override getDisplayMessage(): string {
+        return `You have given an invalid argument for the parameter ${this.getListDisplay()}`
+    }
+}
+
+export class HErrorReferredParams extends Other.HandleableError {
+    private __nominalHErrorReferredParams() {}
+
+    constructor(public referredParameters: CmdGeneralParameter[], public herror: Other.HandleableError) {
+        super(`${referredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
+    }
+
+    public override getDisplayMessage(): string {
+        return Djs.bold(`You have given an invalid argument for the following parameter${this.referredParameters.length > 1 ? "s" : ""}:\n`) +
+            Djs.inlineCode(this.referredParameters.map(param => param.name).join(", ")) + ": " +
+            this.herror.getDisplayMessage()
+    }
+}
+
+export class HErrorParams<HErrorSingleParamsT = unknown> extends Other.HandleableError {
+    private __nominalHErrorParams() { }
+
+    public herrorSingleParams: HErrorSingleParam[]
+
+    constructor(herrorSingleParams: HErrorSingleParamsT, cause?: Error) {
+        const typedHErrorSingleParams = herrorSingleParams as HErrorSingleParam[]
+        super(`The following parameters received arguments that are invalid: ${typedHErrorSingleParams.map(herror => herror.parameter.name)}`, cause)
+
+        this.herrorSingleParams = typedHErrorSingleParams
+    }
+
+    public getDisplayMessage(): string {
+        return Djs.bold("You have given incorrect arguments for these parameters:\n") +
+            (this.herrorSingleParams.map(af => af.getListDisplay())).join("\n")
+    }
 }
 
 type CmdParameterArgs<
@@ -77,6 +147,10 @@ export abstract class CmdParameter<
         return value as IsRequiredMap<ValueTypeT, IsRequired>
     }
 
+
+    public abstract getValueFromString(context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<ValueTypeT, IsRequired>>
+
+
     public async assertValue(_value: ValueTypeT): Promise<HErrorSingleParam | null> {
         return null
     }
@@ -96,7 +170,24 @@ export abstract class CmdParameter<
 
 
 
-export class ChoiceManager<ChoicesT extends Choices> {
+export class ErrorInputNotInChoice extends Error {
+    private __nominalErrorInputNotInChoice() {}
+
+    constructor(public input: string, choices: Choices, cause?: Error) {
+        super(`The input "${input}" is not in the choices: ${choices.map(choice => choice.name).join(", ")}.`, {cause: cause})
+    }
+}
+
+export class HErrorInputNotInChoice extends HErrorSingleParam {
+    private __nominalHErrorInputNotInChoice() {}
+
+    constructor(public parameter: CmdGeneralParameter, public input: string, public choices: Choices, cause?: Error) {
+        super(parameter, `The input "${input}" is not in the choices! The choices are: ${choices.map(choice => choice.name).join(", ")}.`, cause)
+    }
+}
+
+
+export class ChoiceManager<ChoicesT extends Choices<ValueTypeT>, ValueTypeT extends string | number> {
     constructor(public choices: ChoicesT) { }
 
     public setupBuilderOption<
@@ -110,12 +201,27 @@ export class ChoiceManager<ChoicesT extends Choices> {
             ...this.choices as unknown as (Djs.APIApplicationCommandOptionChoice<string> & Djs.APIApplicationCommandOptionChoice<number>)[]
         ) as T
     }
+
+    public getValueFromString(input: string): ValueTypeT {
+        const choice = this.choices.find(choice => choice.name === input)
+        if (choice === undefined) throw new ErrorInputNotInChoice(input, this.choices)
+        return choice.value
+    }
+
+    public getValueFromStringHandled(parameter: CmdGeneralParameter, input: string) {
+        try {
+            return this.getValueFromString(input)
+        } catch (error) {
+            if (error instanceof ErrorInputNotInChoice) throw new HErrorInputNotInChoice(parameter, input, this.choices, error)
+            throw error
+        }
+    }
 }
-interface HasChoices<ChoicesT extends Choices> {
-    choiceManager: ChoiceManager<ChoicesT> | null
+interface HasChoices<ChoicesT extends Choices<ValueTypeT>, ValueTypeT extends string | number> {
+    choiceManager: ChoiceManager<ChoicesT, ValueTypeT> | null
 }
-interface ChoiceManagerMixinArgs<ChoicesT extends Choices> {
-    choiceManager?: ChoiceManager<ChoicesT>
+interface ChoiceManagerMixinArgs<ChoicesT extends Choices<ValueTypeT>, ValueTypeT extends string | number> {
+    choiceManager?: ChoiceManager<ChoicesT, ValueTypeT>
 }
 
 
@@ -125,13 +231,13 @@ export class CmdParamString<
     ChoicesT extends Choices<string> = Choices<string>
 >
     extends CmdParameter<string, IsRequired, Djs.SlashCommandStringOption>
-    implements HasChoices<ChoicesT>
+    implements HasChoices<ChoicesT, string>
 {
     private __nominalString() { }
 
-    public choiceManager: ChoiceManager<ChoicesT> | null
+    public choiceManager: ChoiceManager<ChoicesT, string> | null
 
-    constructor(args: CmdParameterArgs<string, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<string, IsRequired> & ChoiceManagerMixinArgs<ChoicesT, string>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
     }
@@ -145,8 +251,34 @@ export class CmdParamString<
         return this
     }
 
+
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getString(...this.toGetValueArgs())
+    }
+
+    public override async getValueFromString(_context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<string, IsRequired>> {
+        if (this.choiceManager !== null) {
+            // TEST
+            return this.choiceManager.getValueFromStringHandled(this, input)
+        }
+        if (input.length > this.max_chars) {
+            // TEST
+            throw new HErrorSingleParam(
+                this,
+                "The length of the input is too long! " +
+                `Maximum length is ${this.max_chars}, your input is ${input.length} characters long.`
+            )
+        }
+        if (input.length < this.min_chars) {
+            // TEST
+            throw new HErrorSingleParam(
+                this,
+                "The length of the input is too short! " +
+                `Minimum length is ${this.min_chars}, your input is ${input.length} characters long.`
+            )
+        }
+
+        return input
     }
 
 
@@ -167,23 +299,85 @@ export class CmdParamString<
 }
 
 
-interface ParamNumeric<ChoicesT extends Choices> extends HasChoices<ChoicesT> {
-    min_value: number | null
-    max_value: number | null
-    setSizeLimits: (min: number | null, max: number | null) => this
+
+class ErrorNumberTooSmall extends Error {
+    private __nominalErrorNumberTooSmall() {}
+
+    constructor(public input: number, public minValue: number, cause?: Error) {
+        super(`Input ${input} is too small, minimum is ${minValue}.`, {cause: cause})
+    }
 }
 
-function setSizeLimitsNumeric(paramNumeric: ParamNumeric<Choices>, min: number | null, max: number | null) {
-    paramNumeric.min_value = min
-    paramNumeric.max_value = max
+class ErrorNumberTooBig extends Error {
+    private __nominalErrorErrorNumberTooBig() {}
+
+    constructor(public input: number, public maxValue: number, cause?: Error) {
+        super(`Input ${input} is too big, maximum is ${maxValue}.`, {cause: cause})
+    }
 }
+
+
+class HErrorNumberTooSmall extends HErrorSingleParam {
+    private __nominalHErrorNumberTooSmall() {}
+
+    constructor(public parameter: CmdGeneralParameter, public input: number, public minValue: number, cause?: Error) {
+        super(parameter, `Your input is too small! The minimum is ${minValue}, your input was ${input}!`, cause)
+    }
+}
+
+class HErrorNumberTooBig extends HErrorSingleParam {
+    private __nominalHErrorNumberTooBig() {}
+
+    constructor(public parameter: CmdGeneralParameter, public input: number, public maxValue: number, cause?: Error) {
+        super(parameter, `Your input is too big! The maximum is ${maxValue}, your input was ${input}!`, cause)
+    }
+}
+
+
+class BoundedNumberHandler {
+    constructor(public minValue: number | null = null, public maxValue: number | null = null) {}
+
+    public validateNumber(input: number) {
+        if (this.minValue !== null) {
+            // TEST
+            if (input < this.minValue) return new ErrorNumberTooSmall(input, this.minValue)
+        }
+        if (this.maxValue !== null) {
+            // TEST
+            if (input > this.maxValue) return new ErrorNumberTooBig(input, this.maxValue)
+        }
+        return null
+    }
+
+    public validateNumberHandled(parameter: CmdGeneralParameter, input: number) {
+        const result = this.validateNumber(input)
+        if (result instanceof ErrorNumberTooBig) throw new HErrorNumberTooBig(parameter, result.input, result.maxValue, result)
+        if (result instanceof ErrorNumberTooSmall) throw new HErrorNumberTooSmall(parameter, result.input, result.minValue, result)
+        return null
+    }
+}
+interface HasBoundHandler extends CmdGeneralParameter {
+    boundedNumberHandler: BoundedNumberHandler | null
+}
+interface BoundHandlerMixinArgs {
+    boundedNumberHandler?: BoundedNumberHandler | null
+}
+
+
+interface ParamNumeric<ChoicesT extends Choices<number>> extends HasBoundHandler, HasChoices<ChoicesT, number> {}
+
+interface ParamNumericMixinArgs<ChoicesT extends Choices<number>> extends ChoiceManagerMixinArgs<ChoicesT, number>, BoundHandlerMixinArgs {}
 
 function setupBuilderOptionNumeric<
     BuilderOption extends Djs.SlashCommandIntegerOption | Djs.SlashCommandNumberOption,
     ChoicesT extends Choices<number>
 >(parameter: ParamNumeric<ChoicesT>, builder: BuilderOption): BuilderOption {
-    if (parameter.max_value !== null) builder.setMaxValue(parameter.max_value)
-    if (parameter.min_value !== null) builder.setMinValue(parameter.min_value)
+    if (parameter.boundedNumberHandler !== null) {
+        // TEST
+        const bnh = parameter.boundedNumberHandler
+        if (bnh.maxValue !== null) builder.setMaxValue(bnh.maxValue)
+        if (bnh.minValue !== null) builder.setMinValue(bnh.minValue)
+    }
 
     if (parameter.choiceManager !== null) {
         return parameter.choiceManager.setupBuilderOption(builder)
@@ -192,28 +386,48 @@ function setupBuilderOptionNumeric<
     }
 }
 
+
+
+class HErrorNaN extends HErrorSingleParam {
+    private __nominalHErrorNaN() {}
+
+    constructor(public parameter: CmdGeneralParameter, public input: string, public type: "integer" | "number", cause?: Error) {
+        super(parameter, `The input "${input}" is not ${type === "integer" ? "an integer" : "a number"}!`, cause)
+    }
+}
+
+
+
 export class CmdParamInteger<
     IsRequired extends boolean = boolean,
     ChoicesT extends Choices<number> = Choices<number>
 > extends CmdParameter<number, IsRequired, Djs.SlashCommandIntegerOption> implements ParamNumeric<ChoicesT> {
     private __nominalInt() { }
 
-    public choiceManager: ChoiceManager<ChoicesT> | null
-    public min_value: number | null = null
-    public max_value: number | null = null
+    public choiceManager: ChoiceManager<ChoicesT, number> | null
+    public boundedNumberHandler: BoundedNumberHandler | null
 
-    constructor(args: CmdParameterArgs<number, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<number, IsRequired> & ParamNumericMixinArgs<ChoicesT>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
-    }
-
-    public setSizeLimits(min: number | null, max: number | null) {
-        setSizeLimitsNumeric(this, min, max)
-        return this
+        this.boundedNumberHandler = args.boundedNumberHandler ?? null
     }
 
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getInteger(...this.toGetValueArgs())
+    }
+
+    public override async getValueFromString(_context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<number, IsRequired>> {
+        // TEST not number
+        // TEST float
+        const inputNumber = parseInt(input)
+        if (Number.isNaN(inputNumber)) throw new HErrorNaN(this, input, "integer")
+        this.boundedNumberHandler?.validateNumberHandled(this, inputNumber)
+        if (this.choiceManager !== null) {
+            return this.choiceManager.getValueFromStringHandled(this, input)
+        } else {
+            return inputNumber
+        }
     }
 
 
@@ -232,23 +446,30 @@ export class CmdParamNumber<
 > extends CmdParameter<number, IsRequired, Djs.SlashCommandNumberOption> implements ParamNumeric<ChoicesT> {
     private __nominalNumber() { }
 
-    public choiceManager: ChoiceManager<ChoicesT> | null
-    public min_value: number | null = null
-    public max_value: number | null = null
+    public choiceManager: ChoiceManager<ChoicesT, number> | null
+    public boundedNumberHandler: BoundedNumberHandler | null
 
-    constructor(args: CmdParameterArgs<number, IsRequired> & ChoiceManagerMixinArgs<ChoicesT>) {
+    constructor(args: CmdParameterArgs<number, IsRequired> & ParamNumericMixinArgs<ChoicesT>) {
         super(args)
         this.choiceManager = args.choiceManager ?? null
+        this.boundedNumberHandler = args.boundedNumberHandler ?? null
     }
 
-    public setSizeLimits(min: number | null, max: number | null) {
-        this.min_value = min
-        this.max_value = max
-        return this
-    }
 
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getNumber(...this.toGetValueArgs())
+    }
+
+    public override async getValueFromString(_context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<number, IsRequired>> {
+        // TEST not number
+        const inputNumber = parseFloat(input)
+        if (Number.isNaN(inputNumber)) throw new HErrorNaN(this, input, "number")
+        this.boundedNumberHandler?.validateNumberHandled(this, inputNumber)
+        if (this.choiceManager !== null) {
+            return this.choiceManager.getValueFromStringHandled(this, input)
+        } else {
+            return inputNumber
+        }
     }
 
     public override setupBuilderOption(option: Djs.SlashCommandNumberOption): Djs.SlashCommandNumberOption {
@@ -260,18 +481,43 @@ export class CmdParamNumber<
     }
 }
 
+
 export class CmdParamBoolean<
     IsRequired extends boolean = boolean,
 > extends CmdParameter<boolean, IsRequired, Djs.SlashCommandBooleanOption> {
     private __nominalBoolean() { }
 
+    static validTrueStrings = ["true", "1", "yes"]
+    static validFalseStrings = ["false", "0", "no"]
+
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getBoolean(...this.toGetValueArgs())
+    }
+
+    public override async getValueFromString(_context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<boolean, IsRequired>> {
+        input = input.toLowerCase()
+        if (CmdParamBoolean.validTrueStrings.includes(input)) return true
+        if (CmdParamBoolean.validFalseStrings.includes(input)) return false
+
+        throw new HErrorSingleParam(
+            this,
+            `The input ${Djs.inlineCode(input)} is not a valid boolean! ` +
+            `Input a true value using ${Djs.inlineCode(CmdParamBoolean.validTrueStrings.join(", "))} or ` +
+            `input a false value using ${Djs.inlineCode(CmdParamBoolean.validFalseStrings.join(", "))}!`
+        )
     }
 
     public override addOptionToBuilder(builder: Builder): BuilderReturned {
         return builder.addBooleanOption(this.setupBuilderOption.bind(this))
     }
+}
+
+
+
+function isSnowflakeHError(parameter: CmdGeneralParameter, input: string) {
+    // TEST
+    const idTest = parseInt(input)
+    if (Number.isNaN(idTest)) throw new HErrorSingleParam(parameter, "The input is not an ID.")
 }
 
 
@@ -283,6 +529,22 @@ export class CmdParamMentionable<
 
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getMentionable(...this.toGetValueArgs())
+    }
+
+    public override async getValueFromString(context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<CmdParamMentionableValue, IsRequired>> {
+        isSnowflakeHError(this, input)
+
+        // TEST
+        if (context instanceof Context.ContextDM) throw new HErrorSingleParam(this, "You can't use this command in DMs.")
+
+        const roleResult = await context.guild.roles.fetch(input, {force: true})
+        if (roleResult !== null) return roleResult
+
+        const memberResult = await context.guild.members.fetch({user: input, force: true})
+        if (memberResult !== null) return memberResult
+
+        // TEST
+        throw new HErrorSingleParam(this, "The ID is not a role or member.")
     }
 
     public override addOptionToBuilder(builder: Builder): BuilderReturned {
@@ -360,6 +622,22 @@ export class CmdParamChannel<
 
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getChannel(...this.toGetValueArgs()) as ValueTypeT
+    }
+
+    public override async getValueFromString(context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<ValueTypeT, IsRequired>> {
+        isSnowflakeHError(this, input)
+
+        if (context instanceof Context.ContextDM) throw new HErrorSingleParam(this, "You can't use this command in DMs.")
+
+        // TEST
+        const result = await context.guild.channels.fetch(input, {force: true})
+        if (result === null) throw new HErrorSingleParam(this, "The input is not a channel.")
+
+        // TODO got burned out maybe tomorrow
+
+        if (this.validChannelTypes !== null) {
+            if (!(this.validChannelTypes.includes(result.type))
+        }
     }
 
     public override async assertValue(value: ValueTypeT): Promise<HErrorSingleParam | null> {
@@ -453,72 +731,6 @@ type InferChoices<ParamWithChoice extends ParamsWithChoices> = (
 type ValueOrChoiceMap<ValueTypeT, ChoicesT extends Choices<string | number>> = (
     ChoicesT extends null ? ValueTypeT : NonNullable<ChoicesT>[number]["value"]
 )
-
-
-
-export class HErrorParamValueCheck extends Other.HandleableError {
-    private __nominalHErrorParamValueCheck() {}
-
-    constructor(public herror: Other.HandleableError) {
-        super(herror.internalMessage, herror)
-    }
-
-    public override getDisplayMessage(): string {
-        return this.herror.getDisplayMessage()
-    }
-}
-
-export class HErrorSingleParam extends Other.HandleableError {
-    private __nominalHErrorSingleParam() { }
-
-    constructor(public parameter: CmdGeneralParameter, public externalMessage: string, cause?: Error) {
-        super(`${parameter.name}: ${externalMessage}`, cause)
-    }
-
-    static fromParamValueCheck(herror: HErrorParamValueCheck, parameter: CmdGeneralParameter) {
-        return new HErrorSingleParam(parameter, herror.getDisplayMessage(), herror)
-    }
-
-    public getListDisplay() {
-        return `${Djs.inlineCode(this.parameter.name)}: ${this.externalMessage}`
-    }
-
-    public override getDisplayMessage(): string {
-        return `You have given an invalid argument for the parameter ${this.getListDisplay()}`
-    }
-}
-
-export class HErrorReferredParams extends Other.HandleableError {
-    private __nominalHErrorReferredParams() {}
-
-    constructor(public referredParameters: CmdGeneralParameter[], public herror: Other.HandleableError) {
-        super(`${referredParameters.map(param => param.name).join(", ")}: ${herror.getDisplayMessage()}`, herror)
-    }
-
-    public override getDisplayMessage(): string {
-        return Djs.bold(`You have given an invalid argument for the following parameter${this.referredParameters.length > 1 ? "s" : ""}:\n`) +
-            Djs.inlineCode(this.referredParameters.map(param => param.name).join(", ")) + ": " +
-            this.herror.getDisplayMessage()
-    }
-}
-
-export class HErrorParams<HErrorSingleParamsT = unknown> extends Other.HandleableError {
-    private __nominalHErrorParams() { }
-
-    public herrorSingleParams: HErrorSingleParam[]
-
-    constructor(herrorSingleParams: HErrorSingleParamsT, cause?: Error) {
-        const typedHErrorSingleParams = herrorSingleParams as HErrorSingleParam[]
-        super(`The following parameters received arguments that are invalid: ${typedHErrorSingleParams.map(herror => herror.parameter.name)}`, cause)
-
-        this.herrorSingleParams = typedHErrorSingleParams
-    }
-
-    public getDisplayMessage(): string {
-        return Djs.bold("You have given incorrect arguments for these parameters:\n") +
-            (this.herrorSingleParams.map(af => af.getListDisplay())).join("\n")
-    }
-}
 
 
 
