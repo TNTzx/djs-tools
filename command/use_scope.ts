@@ -16,7 +16,7 @@ export const useScopeDMsOnly: UseScope<false, true> = {isGuildUsable: false, isD
 export interface GuildCommandInteraction extends Djs.ChatInputCommandInteraction {
     guild: Djs.Guild
     guildId: string
-    channel: Djs.TextBasedChannel
+    channel: Djs.GuildTextBasedChannel
     member: Djs.GuildMember
 }
 
