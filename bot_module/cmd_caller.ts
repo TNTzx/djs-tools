@@ -73,7 +73,8 @@ export function setupCmdCallerEvent(client: Djs.Client) {
         try {
             await interaction.deferReply()
         } catch (error) {
-            await interaction.channel?.send("The bot took too long to respond. Please try again.")
+            if (interaction.channel?.isSendable())
+                await interaction.channel.send("The bot took too long to respond. Please try again.")
             return
         }
 
@@ -123,7 +124,8 @@ export function setupCmdCallerEvent(client: Djs.Client) {
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp(messageContent)
             } else {
-                await interaction.channel?.send(messageContent)
+                if (interaction.channel?.isSendable())
+                    await interaction.channel.send(messageContent)
             }
         }
     })
