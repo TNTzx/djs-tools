@@ -1,5 +1,7 @@
 import Djs from "discord.js"
 
+import * as Client from "../client"
+
 import * as Other from "../other"
 import * as Context from "./context"
 
@@ -11,7 +13,7 @@ export type Choices<T extends string | number = string | number> = readonly Choi
 type IsRequiredMap<ValueTypeT, IsRequired extends boolean> = IsRequired extends true ? ValueTypeT : ValueTypeT | null
 
 type Builder = Djs.SlashCommandBuilder | Djs.SlashCommandSubcommandBuilder
-type BuilderReturned = Djs.SlashCommandSubcommandBuilder | Omit<Djs.SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">
+type BuilderReturned = Djs.SlashCommandSubcommandBuilder | Djs.SlashCommandOptionsOnlyBuilder
 
 type ValueChecker<ValueTypeT> = ((value: ValueTypeT) => Promise<HErrorParamValueCheck | null>) | null
 
@@ -564,14 +566,19 @@ export interface CmdParamChannelGeneral<
 export type CmdParamChannelValue = NonNullable<ReturnType<Other.ChatInputCommandInteractionOptions["getChannel"]>>
 
 export enum ChannelRestrict {
-    Text = Djs.ChannelType.GuildText,
+    GuildText = Djs.ChannelType.GuildText,
     DM = Djs.ChannelType.DM,
-    Voice = Djs.ChannelType.GuildVoice,
-    Category = Djs.ChannelType.GuildCategory,
+    GuildVoice = Djs.ChannelType.GuildVoice,
+    GroupDM = Djs.ChannelType.GroupDM,
+    GuildCategory = Djs.ChannelType.GuildCategory,
+    GuildAnnouncement = Djs.ChannelType.GuildAnnouncement,
+    AnnouncementThread = Djs.ChannelType.AnnouncementThread,
     PublicThread = Djs.ChannelType.PublicThread,
     PrivateThread = Djs.ChannelType.PrivateThread,
-    Stage = Djs.ChannelType.GuildStageVoice,
-    Forum = Djs.ChannelType.GuildForum
+    GuildStageVoice = Djs.ChannelType.GuildStageVoice,
+    GuildDirectory = Djs.ChannelType.GuildDirectory,
+    GuildForum = Djs.ChannelType.GuildForum,
+    GuildMedia = Djs.ChannelType.GuildMedia
 }
 
 type ChannelRestrictsMap<ValidChannelTypes extends readonly ChannelRestrict[]> = (
@@ -583,25 +590,35 @@ type ChannelRestrictsOptionalMap<ValidChannelTypes extends (readonly ChannelRest
     : CmdParamChannelValue
 )
 type ChannelEnumToRestrictMap<ChannelType extends ChannelRestrict> = (
-    ChannelType extends ChannelRestrict.Text ? Djs.TextChannel :
+    ChannelType extends ChannelRestrict.GuildText ? Djs.TextChannel :
     ChannelType extends ChannelRestrict.DM ? Djs.DMChannel :
-    ChannelType extends ChannelRestrict.Voice ? Djs.VoiceChannel :
-    ChannelType extends ChannelRestrict.Category ? Djs.CategoryChannel :
-    ChannelType extends ChannelRestrict.PublicThread ? Djs.PublicThreadChannel<boolean> :
-    ChannelType extends ChannelRestrict.PrivateThread ? Djs.PrivateThreadChannel :
-    ChannelType extends ChannelRestrict.Stage ? Djs.StageChannel :
-    ChannelType extends ChannelRestrict.Forum ? Djs.ForumChannel :
+    ChannelType extends ChannelRestrict.GuildVoice ? Djs.VoiceChannel :
+    ChannelType extends ChannelRestrict.GroupDM ? Djs.PartialGroupDMChannel :
+    ChannelType extends ChannelRestrict.GuildCategory ? Djs.CategoryChannel :
+    ChannelType extends ChannelRestrict.GuildAnnouncement ? Djs.TextChannel :
+    ChannelType extends ChannelRestrict.AnnouncementThread ? Djs.ThreadChannel :
+    ChannelType extends ChannelRestrict.PublicThread ? Djs.ThreadChannel :
+    ChannelType extends ChannelRestrict.PrivateThread ? Djs.ThreadChannel :
+    ChannelType extends ChannelRestrict.GuildStageVoice ? Djs.StageChannel :
+    ChannelType extends ChannelRestrict.GuildDirectory ? Djs.DirectoryChannel :
+    ChannelType extends ChannelRestrict.GuildForum ? Djs.ForumChannel :
+    ChannelType extends ChannelRestrict.GuildMedia ? Djs.MediaChannel :
     never
 )
 const channelEnumToStringMap = {
-    [ChannelRestrict.Text]: "text",
-    [ChannelRestrict.DM]: "DM",
-    [ChannelRestrict.Voice]: "voice",
-    [ChannelRestrict.Category]: "category",
-    [ChannelRestrict.PublicThread]: "public thread",
-    [ChannelRestrict.PrivateThread]: "private thread",
-    [ChannelRestrict.Stage]: "stage",
-    [ChannelRestrict.Forum]: "forum"
+    [ChannelRestrict.GuildText]: "text",
+    [ChannelRestrict.DM]: "dm",
+    [ChannelRestrict.GuildVoice]: "voice",
+    [ChannelRestrict.GroupDM]: "group-dm",
+    [ChannelRestrict.GuildCategory]: "category",
+    [ChannelRestrict.GuildAnnouncement]: "announcement",
+    [ChannelRestrict.AnnouncementThread]: "announcement-thread",
+    [ChannelRestrict.PublicThread]: "public-thread",
+    [ChannelRestrict.PrivateThread]: "private-thread",
+    [ChannelRestrict.GuildStageVoice]: "stage",
+    [ChannelRestrict.GuildDirectory]: "directory",
+    [ChannelRestrict.GuildForum]: "forum",
+    [ChannelRestrict.GuildMedia]: "media",
 }
 export class CmdParamChannel<
     ChannelRestrictsT extends (readonly ChannelRestrict[]) | null = (readonly ChannelRestrict[]) | null,
@@ -636,8 +653,16 @@ export class CmdParamChannel<
         // TODO got burned out maybe tomorrow
 
         if (this.validChannelTypes !== null) {
-            if (!(this.validChannelTypes.includes(result.type))
+            if (result !== null && !(this.validChannelTypes.includes(result.type as unknown as ChannelRestrict))) {
+                throw new HErrorSingleParam(this,
+                    "The channel is not within the valid channel types. Valid channel types are: `" +
+                    this.validChannelTypes.map(x => channelEnumToStringMap[x]).join("`, `") +
+                    "`"
+                )
+            }
         }
+
+        return result as IsRequiredMap<ValueTypeT, IsRequired>
     }
 
     public override async assertValue(value: ValueTypeT): Promise<HErrorSingleParam | null> {
@@ -672,6 +697,15 @@ export class CmdParamRole<
         return options.getRole(...this.toGetValueArgs())
     }
 
+    public override async getValueFromString(context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<CmdParamRoleValue, IsRequired>> {
+        if (context instanceof Context.ContextDM) throw new HErrorSingleParam(this, "You can't use this command in DMs.")
+
+        const roleResult = await context.guild.roles.fetch(input, {force: true})
+        if (roleResult === null) throw new HErrorSingleParam(this, "The ID is not a role.")
+
+        return roleResult
+    }
+
     public override addOptionToBuilder(builder: Builder): BuilderReturned {
         return builder.addRoleOption(this.setupBuilderOption.bind(this))
     }
@@ -687,6 +721,13 @@ export class CmdParamUser<
         return options.getUser(...this.toGetValueArgs())
     }
 
+    public override async getValueFromString(context: Context.ContextGuild | Context.ContextDM, input: string): Promise<IsRequiredMap<CmdParamUserValue, IsRequired>> {
+        const userResult = await Client.getBotClient().users.fetch(input, {force: true})
+        if (userResult === null) throw new HErrorSingleParam(this, "The ID is not a user.")
+
+        return userResult
+    }
+
     public override addOptionToBuilder(builder: Builder): BuilderReturned {
         return builder.addUserOption(this.setupBuilderOption.bind(this))
     }
@@ -700,6 +741,10 @@ export class CmdParamAttachment<
 
     public override getValueFromItrOptions(options: Other.ChatInputCommandInteractionOptions) {
         return options.getAttachment(...this.toGetValueArgs())
+    }
+
+    public getValueFromString(_context: Context.ContextGuild | Context.ContextDM, _input: string): Promise<IsRequiredMap<Djs.Attachment, IsRequired>> {
+        throw new Error("Method not implemented.")
     }
 
     public override addOptionToBuilder(builder: Builder): BuilderReturned {
