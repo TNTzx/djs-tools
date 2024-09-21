@@ -650,8 +650,6 @@ export class CmdParamChannel<
         const result = await context.guild.channels.fetch(input, {force: true})
         if (result === null) throw new HErrorSingleParam(this, "The input is not a channel.")
 
-        // TODO got burned out maybe tomorrow
-
         if (this.validChannelTypes !== null) {
             if (result !== null && !(this.validChannelTypes.includes(result.type as unknown as ChannelRestrict))) {
                 throw new HErrorSingleParam(this,
